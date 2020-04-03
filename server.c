@@ -66,7 +66,7 @@ typedef struct
 //*********************
 int load_configuration(char* path, server_configuration* configuration);
 client* read_bbdd(int* num_clients);
-int check_id(char* id);
+client* find_client(char* id);
 //UDP
 void udp_signalhandler(int signal);
 void udp_control();
@@ -150,22 +150,29 @@ client* read_bbdd(int* num_clients)
     return client_list; 
 }
 
-int check_id(char* id)
+client* find_client(char* id)
 {
    int i;
    for(i = 0; i < num_clients; i++)
    {
       if(strcmp(id, clients[i].id) == 0)
-         return 1;
+         return &clients[i];
    }
-   return 0;
+   return NULL;
 }
 
 //UDP Protocol
 void register_process(udp_pdu *package)
 {
-   if(check_id(package->id))
-      printf("id correcta\n");  
+   client *client_to_register;
+   udp_pdu package_to_send;
+   memset(&package_to_send, 0, sizeof(udp_pdu));
+
+   
+   if((client_to_register = find_client(package->id)) == NULL)
+   {
+      exit(-1);
+   }  
    exit(0);
 }
 
