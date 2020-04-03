@@ -297,7 +297,7 @@ def server_conexions():
    socket_tcpB = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
    socket_tcpB.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
    try:
-      socket_tcpB.bind((socket.gethostbyname(socket.gethostname()), configuration.local_tcp))
+      socket_tcpB.bind(('127.0.0.1', configuration.local_tcp))
    except :
       print('\rNo se ha podido abrir conexion')
       client_state = ClientState.DISCONNECTED
