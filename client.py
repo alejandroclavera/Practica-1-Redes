@@ -130,6 +130,7 @@ def register_process():
          register_state = ClientState.NOT_REGISTERED
          return ClientState.NOT_REGISTERED   
       package, server_info = socket_udp.recvfrom(84)
+      print(package)
       package = Package.unpack(package)   
       if package.package_type == PackageType.REG_REJ.value:
          register_state = ClientState.NOT_REGISTERED
