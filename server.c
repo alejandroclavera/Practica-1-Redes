@@ -5,6 +5,8 @@
 #include <time.h>
 #include <string.h>
 #include<signal.h>
+#include<sys/types.h>
+#include<sys/wait.h>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -71,7 +73,7 @@ client* find_client(char* id);
 void udp_signalhandler(int signal);
 void udp_control();
 int open_udp_chanel();
-void register_process();
+void register_process(udp_pdu *package, struct sockaddr_in* addr_client, int laddr_client);
 
 
 //*********************
@@ -88,7 +90,6 @@ void udp_signalhandler(int signal)
    if(signal == SIGINT)
    {
       printf("\rProceso cerrado por ^c\n");
-      //fflush(socket_udp);
       close(socket_udp);
       exit(0);
    }
@@ -162,16 +163,27 @@ client* find_client(char* id)
 }
 
 //UDP Protocol
-void register_process(udp_pdu *package)
+void register_process(udp_pdu *package, struct sockaddr_in* addr_client, int laddr_client)
 {
    client *client_to_register;
    udp_pdu package_to_send;
    memset(&package_to_send, 0, sizeof(udp_pdu));
-
-   
    if((client_to_register = find_client(package->id)) == NULL)
    {
-      exit(-1);
+      package_to_send.package_type = REG_REJ;
+      strcpy(package_to_send.id, configuration.id);
+      strcpy(package_to_send.random_number, "00000000");
+      strcpy(package_to_send.data, "Id incorrecta");
+      printf("id %s\n", package_to_send.id);
+      printf("rdn %s\n", package_to_send.random_number);
+      printf("%s\n", package_to_send.data);
+      int a = sendto(socket_udp, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, laddr_client);
+      if(a < 0)
+      {
+         fprintf(stderr, "Error al realizar sendto\n");
+         exit(-1);
+      }
+      exit(0);
    }  
    exit(0);
 }
@@ -185,13 +197,15 @@ int open_udp_chanel(int *socket_udp)
    addr_server.sin_family = AF_INET;
 	addr_server.sin_addr.s_addr = INADDR_ANY;
 	addr_server.sin_port= htons(configuration.udp_port);
-   if(bind(*socket_udp,(struct sock_addr *)&addr_server,(socklen_t)sizeof(struct sockaddr_in)) < 0) 
+   if(bind(*socket_udp,(struct sockaddr* )&addr_server,(socklen_t)sizeof(struct sockaddr_in)) < 0) 
       return -1;
    return 0;
 }
 
 void udp_control()
 {
+   struct sockaddr_in addr_client;
+   int laddr_client;
    udp_pdu package;
    int size;
    int pid;
@@ -204,8 +218,8 @@ void udp_control()
    
    while (1)
    {
-      size = recvfrom(socket_udp, &package, sizeof(udp_pdu), 0, NULL, NULL);
-      printf("Peticion");
+      memset(&addr_client, 0, sizeof(struct sockaddr_in));
+      size = recvfrom(socket_udp, &package, sizeof(udp_pdu), 0, (struct sockaddr *)&addr_client, &laddr_client);
       if((pid = fork())< 0)
       {
             printf("No se ha podido crear un proceso para atender la peticion\n");
@@ -213,7 +227,8 @@ void udp_control()
       else if(pid == 0)
       {
          if(package.package_type == REG_REQ)
-            register_process(&package);
+            printf("Iniciando proceso de registro\n");
+            register_process(&package, &addr_client, laddr_client);
 
          exit(0);
       }
