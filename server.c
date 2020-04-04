@@ -5,6 +5,8 @@
 #include <time.h>
 #include <string.h>
 #include<signal.h>
+#include<sys/types.h>
+#include<sys/wait.h>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -178,7 +180,7 @@ int open_udp_chanel(int *socket_udp)
    addr_server.sin_family = AF_INET;
 	addr_server.sin_addr.s_addr = INADDR_ANY;
 	addr_server.sin_port= htons(configuration.udp_port);
-   if(bind(*socket_udp,(struct sock_addr *)&addr_server,(socklen_t)sizeof(struct sockaddr_in)) < 0) 
+   if(bind(*socket_udp,(struct sockaddr* )&addr_server,(socklen_t)sizeof(struct sockaddr_in)) < 0) 
       return -1;
    return 0;
 }
