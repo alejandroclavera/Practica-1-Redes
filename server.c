@@ -69,6 +69,7 @@ typedef struct
 int load_configuration(char* path, server_configuration* configuration);
 client* read_bbdd(int* num_clients);
 client* find_client(char* id);
+void package(udp_pdu *package, unsigned char type, char *id, char *rdn, char *data);
 //UDP
 void udp_signalhandler(int signal);
 void udp_control();
@@ -162,29 +163,40 @@ client* find_client(char* id)
    return NULL;
 }
 
+void package(udp_pdu *package, unsigned char type, char *id, char *rdn, char *data)
+{
+  package->package_type = type;
+  strcpy(package->id, id);
+  strcpy(package->random_number, rdn);
+  strcpy(package->data, data);
+}
 //UDP Protocol
-void register_process(udp_pdu *package, struct sockaddr_in* addr_client, int laddr_client)
+void register_process(udp_pdu *client_package, struct sockaddr_in* addr_client, int laddr_client)
 {
    client *client_to_register;
    udp_pdu package_to_send;
+   int nbytes;
    memset(&package_to_send, 0, sizeof(udp_pdu));
-   if((client_to_register = find_client(package->id)) == NULL)
+   if((client_to_register = find_client(client_package->id)) == NULL)
    {
-      package_to_send.package_type = REG_REJ;
-      strcpy(package_to_send.id, configuration.id);
-      strcpy(package_to_send.random_number, "00000000");
-      strcpy(package_to_send.data, "Id incorrecta");
-      printf("id %s\n", package_to_send.id);
-      printf("rdn %s\n", package_to_send.random_number);
-      printf("%s\n", package_to_send.data);
-      int a = sendto(socket_udp, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, laddr_client);
-      if(a < 0)
+      package(&package_to_send, REG_REJ, configuration.id, "00000000", "Id incorrecta");
+      nbytes = sendto(socket_udp, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, laddr_client);
+      if(nbytes < 0)
       {
          fprintf(stderr, "Error al realizar sendto\n");
          exit(-1);
       }
-      exit(0);
-   }  
+   }
+   else if(strcmp(client_package->random_number, "00000000") !=0)
+   {
+      package(&package_to_send, REG_REJ, configuration.id, "00000000", "numero aleatorio incorrecto");
+      nbytes = sendto(socket_udp, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, laddr_client);
+      if(nbytes < 0)
+      {
+         fprintf(stderr, "Error al realizar sendto\n");
+         exit(-1);
+      }
+   }
    exit(0);
 }
 
