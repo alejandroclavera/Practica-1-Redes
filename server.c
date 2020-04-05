@@ -226,7 +226,7 @@ void register_process(udp_pdu *client_package, struct sockaddr_in* addr_client, 
 		nbytes = sendto(socket_udp, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
 		exit(0);
    }
-	else if(strcmp(client_package->random_number, client_to_register->random_number)!=0) 
+   else if(strcmp(client_package->random_number, client_to_register->random_number)!=0) 
 	{
 		package(&package_to_send, INFO_NACK, configuration.id, client_to_register->random_number, "numero aleatorio incorrectoD");
 		nbytes = sendto(socket_udp, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
