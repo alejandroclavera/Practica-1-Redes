@@ -73,7 +73,7 @@ void package(udp_pdu *package, unsigned char type, char *id, char *rdn, char *da
 //UDP
 void udp_signalhandler(int signal);
 void udp_control();
-int open_udp_chanel();
+int open_udp_chanel(int *socket_udp, int port);
 void register_process(udp_pdu *package, struct sockaddr_in* addr_client, int *laddr_client);
 
 
@@ -239,7 +239,7 @@ void register_process(udp_pdu *client_package, struct sockaddr_in* addr_client, 
    exit(0);
 }
 
-int open_udp_chanel(int *socket_udp)
+int open_udp_chanel(int *socket_udp, int port)
 {
    struct sockaddr_in addr_server;
    if((*socket_udp = socket(AF_INET,SOCK_DGRAM,0)) < 0) 
@@ -247,7 +247,7 @@ int open_udp_chanel(int *socket_udp)
    memset(&addr_server, 0, sizeof(struct sockaddr_in));
    addr_server.sin_family = AF_INET;
    addr_server.sin_addr.s_addr = INADDR_ANY;
-   addr_server.sin_port= htons(configuration.udp_port);
+   addr_server.sin_port= htons(port);
    if(bind(*socket_udp,(struct sockaddr* )&addr_server,(socklen_t)sizeof(struct sockaddr_in)) < 0) 
       return -1;
    return 0;
@@ -260,7 +260,7 @@ void udp_control()
    udp_pdu client_package;
    int size;
    int pid;
-   if(open_udp_chanel(&socket_udp) == -1)
+   if(open_udp_chanel(&socket_udp, configuration.udp_port) == -1)
    {
       fprintf(stderr ,"Error no se ha podido abrir la conexion udp");
       close(socket_udp);
