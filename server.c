@@ -174,9 +174,9 @@ void package(udp_pdu *package, unsigned char type, char *id, char *rdn, char *da
 
 void view_package(udp_pdu * package)
 {
-	printf("type = %d	\n", package->package_type);
-	printf("id = %s	\n", package->id);
-	printf("rdn = %s	\n", package->random_number);
+   printf("type = %d	\n", package->package_type);
+   printf("id = %s	\n", package->id);
+   printf("rdn = %s	\n", package->random_number);
 }
 
 //UDP Protocol
@@ -227,17 +227,17 @@ void register_process(udp_pdu *client_package, struct sockaddr_in* addr_client, 
 		exit(0);
    }
    else if(strcmp(client_package->random_number, client_to_register->random_number)!=0) 
-	{
-		package(&package_to_send, INFO_NACK, configuration.id, client_to_register->random_number, "numero aleatorio incorrectoD");
-		nbytes = sendto(socket_udp, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
-		exit(0);
-	}
+   {
+      package(&package_to_send, INFO_NACK, configuration.id, client_to_register->random_number, "numero aleatorio incorrectoD");
+      nbytes = sendto(socket_udp, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
+      exit(0);
+   }
 
-	char tcp_port[100];
-	sprintf(tcp_port, "%d", configuration.tcp_port);
-	package(&package_to_send, INFO_ACK, configuration.id, client_to_register->random_number, tcp_port);
-	nbytes = sendto(socket_udp, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
-	exit(0);
+   char tcp_port[100];
+   sprintf(tcp_port, "%d", configuration.tcp_port);
+   package(&package_to_send, INFO_ACK, configuration.id, client_to_register->random_number, tcp_port);
+   nbytes = sendto(socket_udp, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
+   exit(0);
 }
 
 int open_udp_chanel(int *socket_udp)
