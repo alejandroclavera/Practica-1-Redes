@@ -232,7 +232,6 @@ void register_process(udp_pdu *client_package, struct sockaddr_in* addr_client, 
       nbytes = sendto(socket_udp, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
       exit(0);
    }
-
    char tcp_port[100];
    sprintf(tcp_port, "%d", configuration.tcp_port);
    package(&package_to_send, INFO_ACK, configuration.id, client_to_register->random_number, tcp_port);
