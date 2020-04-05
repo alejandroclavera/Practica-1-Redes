@@ -52,6 +52,7 @@ typedef struct
    char id[13];
    char random_number[9];
    int stat;
+   char devices[100];
 }client;
 
 typedef struct
@@ -183,7 +184,9 @@ void view_package(udp_pdu * package)
 void register_process(udp_pdu *client_package, struct sockaddr_in* addr_client, int *laddr_client)
 {
    client *client_to_register;
+   struct sockaddr_in addr_server;
    udp_pdu package_to_send;
+   int socket_udp_register;
    int nbytes;
    int rdn;
    int size;
@@ -211,31 +214,37 @@ void register_process(udp_pdu *client_package, struct sockaddr_in* addr_client, 
    rdn = rand() % 99999999 + 1;
    sprintf(client_to_register->random_number, "%d", rdn);
 	char new_port[100];
-   sprintf(new_port, "%d", configuration.udp_port);
-   package(&package_to_send, REG_ACK, configuration.id, client_to_register->random_number, "2020");
+   socklen_t l = sizeof(addr_server); 
+   open_udp_chanel(&socket_udp_register, 0);
+   getsockname(socket_udp_register, (struct sockaddr *)&addr_server, &l);
+   sprintf(new_port, "%d", ntohs(addr_server.sin_port));
+   package(&package_to_send, REG_ACK, configuration.id, client_to_register->random_number, new_port);
    nbytes = sendto(socket_udp, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
    if(nbytes < 0)
    {
          fprintf(stderr, "Error al realizar sendto\n");
          exit(-1);
    }
-   size = recvfrom(socket_udp, client_package, sizeof(udp_pdu), 0, (struct sockaddr *)addr_client, laddr_client);
+   close(socket_udp);
+   size = recvfrom(socket_udp_register, client_package, sizeof(udp_pdu), 0, (struct sockaddr *)addr_client, laddr_client);
    if(strcmp(client_package->id, client_to_register->id) !=0)
    {
       package(&package_to_send, INFO_NACK, configuration.id, client_to_register->random_number, "Id cliente incorrecta");
-		nbytes = sendto(socket_udp, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
+		nbytes = sendto(socket_udp_register, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
 		exit(0);
    }
    else if(strcmp(client_package->random_number, client_to_register->random_number)!=0) 
    {
       package(&package_to_send, INFO_NACK, configuration.id, client_to_register->random_number, "numero aleatorio incorrectoD");
-      nbytes = sendto(socket_udp, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
+      nbytes = sendto(socket_udp_register, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
       exit(0);
    }
+   strcpy(client_to_register->devices, client_package->data);
+   printf("%s\n", client_to_register->devices);
    char tcp_port[100];
    sprintf(tcp_port, "%d", configuration.tcp_port);
    package(&package_to_send, INFO_ACK, configuration.id, client_to_register->random_number, tcp_port);
-   nbytes = sendto(socket_udp, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
+   nbytes = sendto(socket_udp_register, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
    exit(0);
 }
 
@@ -278,11 +287,14 @@ void udp_control()
       else if(pid == 0)
       {
          if(client_package.package_type == REG_REQ)
+         {
             printf("Iniciando proceso de registro\n");
             srand(time(NULL));
             register_process(&client_package, &addr_client, &laddr_client);
+         }
+         exit(0);
       }
-      wait(NULL);//temporal
+      
    }
    close(socket_udp);
 }
