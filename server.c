@@ -242,13 +242,13 @@ void register_process(udp_pdu *client_package, struct sockaddr_in* addr_client, 
 
 int open_udp_chanel(int *socket_udp)
 {
-	struct sockaddr_in addr_server;
+   struct sockaddr_in addr_server;
    if((*socket_udp = socket(AF_INET,SOCK_DGRAM,0)) < 0) 
-      return -1;     
+		return -1;     
    memset(&addr_server, 0, sizeof(struct sockaddr_in));
    addr_server.sin_family = AF_INET;
-	addr_server.sin_addr.s_addr = INADDR_ANY;
-	addr_server.sin_port= htons(configuration.udp_port);
+   addr_server.sin_addr.s_addr = INADDR_ANY;
+   addr_server.sin_port= htons(configuration.udp_port);
    if(bind(*socket_udp,(struct sockaddr* )&addr_server,(socklen_t)sizeof(struct sockaddr_in)) < 0) 
       return -1;
    return 0;
@@ -282,9 +282,8 @@ void udp_control()
             printf("Iniciando proceso de registro\n");
             srand(time(NULL));
             register_process(&client_package, &addr_client, &laddr_client);
-         //exit(0);
       }
-		wait(NULL);//temporal
+      wait(NULL);//temporal
    }
    close(socket_udp);
 }
