@@ -90,6 +90,7 @@ int num_clients;
 int socket_udp;
 int socket_tcp;
 
+
 void udp_signalhandler(int signal)
 {
    if(signal == SIGINT)
@@ -237,7 +238,8 @@ void register_process(udp_pdu *client_package, struct sockaddr_in* addr_client, 
    rdn = rand() % 99999999 + 1;
    open_udp_chanel(&socket_udp_register, 0);
    getsockname(socket_udp_register, (struct sockaddr *)&addr_server, &laddr_server);
-   sprintf(client_to_register->random_number, "%d", rdn);
+   //sprintf(client_to_register->random_number, "%d", rdn);
+   sprintf(client_to_register->random_number, "%d", 3222);
    sprintf(new_port, "%d", ntohs(addr_server.sin_port));
    package(&package_to_send, REG_ACK, configuration.id, client_to_register->random_number, new_port);
    send_package(socket_udp, &package_to_send, (struct sockaddr *)addr_client, laddr_client);
@@ -269,6 +271,33 @@ void register_process(udp_pdu *client_package, struct sockaddr_in* addr_client, 
    send_package(socket_udp_register, &package_to_send, (struct sockaddr *)addr_client, laddr_client);
    client_to_register->stat = REGISTERED;
    exit(0);
+}
+
+
+void clients_comunication(udp_pdu *client_package, struct sockaddr_in* addr_client, int *laddr_client)
+{
+   udp_pdu package_to_send;
+   client *client;
+
+   memset(&package_to_send, 0, sizeof(udp_pdu));
+   if((client = find_client(client_package->id)) == NULL)
+   {
+      package(&package_to_send,ALIVE_REJ , configuration.id, "00000000", "Id incorrecta");
+      send_package(socket_udp, &package_to_send, (struct sockaddr *)addr_client, laddr_client);
+      exit(0);
+   }
+   
+   else if(strcmp(client_package->random_number, "3222") !=0)
+   {
+      package(&package_to_send, ALIVE_REJ, configuration.id, "3222", "numero aleatorio incorrecto");
+      send_package(socket_udp, &package_to_send, (struct sockaddr *)addr_client, laddr_client);
+      exit(0);
+   }
+
+   package(&package_to_send, ALIVE, configuration.id, "3222", client->id);
+   send_package(socket_udp, &package_to_send, (struct sockaddr *)addr_client, laddr_client);
+   exit(0);   
+
 }
 
 int open_udp_chanel(int *socket_udp, int port)
@@ -314,6 +343,11 @@ void udp_control()
             printf("Iniciando proceso de registro\n");
             srand(time(NULL));
             register_process(&client_package, &addr_client, &laddr_client);
+         }
+         else if(client_package.package_type == ALIVE)
+         {
+            printf("ALIVE\n");
+            clients_comunication(&client_package, &addr_client, &laddr_client);
          }
          exit(0);
       }
