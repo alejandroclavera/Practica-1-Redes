@@ -7,6 +7,7 @@
 #include<signal.h>
 #include<sys/types.h>
 #include<sys/wait.h>
+#include<sys/select.h>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -76,6 +77,8 @@ void udp_signalhandler(int signal);
 void udp_control();
 int open_udp_chanel(int *socket_udp, int port);
 void register_process(udp_pdu *package, struct sockaddr_in* addr_client, int *laddr_client);
+int wait_package(int socket, int time);
+void send_package(int socket, udp_pdu *package, struct sockaddr *addr_client, int *laddr_client);
 
 
 //*********************
@@ -181,12 +184,38 @@ void view_package(udp_pdu * package)
 }
 
 //UDP Protocol
+
+int wait_package(int socket, int time)
+{
+   fd_set readfd;
+   struct timeval timeout;
+   
+   FD_ZERO(&readfd);
+   FD_SET(socket, &readfd);
+
+   timeout.tv_sec = time;
+   timeout.tv_usec = 0;
+   return select(socket + 1, &readfd, NULL, NULL,&timeout);
+}
+
+
+void send_package(int socket, udp_pdu *package, struct sockaddr *addr_client, int *laddr_client)
+{
+   int nbytes =  sendto(socket, package, sizeof(udp_pdu), 0, addr_client, *laddr_client);
+   while (nbytes < 0)
+   {
+     nbytes =  sendto(socket, package, sizeof(udp_pdu), 0, addr_client, *laddr_client);
+   } 
+}
+
 void register_process(udp_pdu *client_package, struct sockaddr_in* addr_client, int *laddr_client)
 {
    client *client_to_register;
    struct sockaddr_in addr_server;
+   socklen_t laddr_server = sizeof(addr_server); 
    udp_pdu package_to_send;
    int socket_udp_register;
+   char new_port[100];
    int nbytes;
    int rdn;
    int size;
@@ -194,49 +223,42 @@ void register_process(udp_pdu *client_package, struct sockaddr_in* addr_client, 
    if((client_to_register = find_client(client_package->id)) == NULL)
    {
       package(&package_to_send, REG_REJ, configuration.id, "00000000", "Id incorrecta");
-      nbytes = sendto(socket_udp, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
-      if(nbytes < 0)
-      {
-         fprintf(stderr, "Error al realizar sendto\n");
-         exit(-1);
-      }
+      send_package(socket_udp, &package_to_send, (struct sockaddr *)addr_client, laddr_client);
+      exit(0);
    }
+   
    else if(strcmp(client_package->random_number, "00000000") !=0)
    {
       package(&package_to_send, REG_REJ, configuration.id, "00000000", "numero aleatorio incorrecto");
-      nbytes = sendto(socket_udp, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
-      if(nbytes < 0)
-      {
-         fprintf(stderr, "Error al realizar sendto\n");
-         exit(-1);
-      }
+      send_package(socket_udp, &package_to_send, (struct sockaddr *)addr_client, laddr_client);
+      exit(0);
    }
+   //Cargamos valores para empaquetar
    rdn = rand() % 99999999 + 1;
-   sprintf(client_to_register->random_number, "%d", rdn);
-	char new_port[100];
-   socklen_t l = sizeof(addr_server); 
    open_udp_chanel(&socket_udp_register, 0);
-   getsockname(socket_udp_register, (struct sockaddr *)&addr_server, &l);
+   getsockname(socket_udp_register, (struct sockaddr *)&addr_server, &laddr_server);
+   sprintf(client_to_register->random_number, "%d", rdn);
    sprintf(new_port, "%d", ntohs(addr_server.sin_port));
    package(&package_to_send, REG_ACK, configuration.id, client_to_register->random_number, new_port);
-   nbytes = sendto(socket_udp, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
-   if(nbytes < 0)
-   {
-         fprintf(stderr, "Error al realizar sendto\n");
-         exit(-1);
-   }
+   send_package(socket_udp, &package_to_send, (struct sockaddr *)addr_client, laddr_client);
+   client_to_register->stat = WAIT_ACK_INFO;
    close(socket_udp);
+   if(wait_package(socket_udp_register, 2)== 0)
+   {
+      client_to_register->stat = DISCONNECTED;
+      exit(0);
+   }
    size = recvfrom(socket_udp_register, client_package, sizeof(udp_pdu), 0, (struct sockaddr *)addr_client, laddr_client);
    if(strcmp(client_package->id, client_to_register->id) !=0)
    {
       package(&package_to_send, INFO_NACK, configuration.id, client_to_register->random_number, "Id cliente incorrecta");
-		nbytes = sendto(socket_udp_register, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
-		exit(0);
+      send_package(socket_udp_register, &package_to_send, (struct sockaddr *)addr_client, laddr_client);
+      exit(0);
    }
    else if(strcmp(client_package->random_number, client_to_register->random_number)!=0) 
    {
       package(&package_to_send, INFO_NACK, configuration.id, client_to_register->random_number, "numero aleatorio incorrectoD");
-      nbytes = sendto(socket_udp_register, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
+      send_package(socket_udp_register, &package_to_send, (struct sockaddr *)addr_client, laddr_client);
       exit(0);
    }
    strcpy(client_to_register->devices, client_package->data);
@@ -244,7 +266,8 @@ void register_process(udp_pdu *client_package, struct sockaddr_in* addr_client, 
    char tcp_port[100];
    sprintf(tcp_port, "%d", configuration.tcp_port);
    package(&package_to_send, INFO_ACK, configuration.id, client_to_register->random_number, tcp_port);
-   nbytes = sendto(socket_udp_register, &package_to_send, sizeof(udp_pdu),0, (struct sockaddr *)addr_client, *laddr_client);
+   send_package(socket_udp_register, &package_to_send, (struct sockaddr *)addr_client, laddr_client);
+   client_to_register->stat = REGISTERED;
    exit(0);
 }
 
