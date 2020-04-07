@@ -54,6 +54,7 @@ typedef struct
    char random_number[9];
    int stat;
    char devices[100];
+   struct sockaddr_in ip;
 }client;
 
 typedef struct
@@ -120,7 +121,7 @@ void controler_signalhandler(int signal)
          fprintf(stderr, "No se ha podido actualizar la informacion del cliente\n");
          exit(0);
       }
-
+     
       for(int i = 0; i < num_clients; i++)
       {
          if(strcmp(client_to_update.id, clients[i].id) == 0)
@@ -130,8 +131,8 @@ void controler_signalhandler(int signal)
       }
       write(udp_protocol_pipe[1], &client_to_update, sizeof(client));
       write(tcp_protocol_pipe[1], &client_to_update, sizeof(client));
-      kill(SIGUSR1, udp_pid);
-      kill(SIGUSR1, tcp_pid);
+      kill(udp_pid, SIGUSR1);
+      kill(tcp_pid, SIGUSR1);
       
    }
 }
@@ -147,14 +148,12 @@ void udp_signalhandler(int signal)
    }
    else if(signal == SIGUSR1)
    {
-      printf("update\n");
       read_code = read(udp_protocol_pipe[0], &client_to_update, sizeof(client));
       if(read_code < 0)
       {
          fprintf(stderr, "No se ha podido actualizar la informacion del cliente\n");
          exit(0);
       }
-
       for(int i = 0; i < num_clients; i++)
       {
          if(strcmp(client_to_update.id, clients[i].id) == 0)
@@ -309,11 +308,11 @@ void register_process(udp_pdu *client_package, struct sockaddr_in* addr_client, 
       exit(0);
    }
    //Cargamos valores para empaquetar
+   client_to_register->ip = (*addr_client);
    rdn = rand() % 99999999 + 1;
    open_udp_chanel(&socket_udp_register, 0);
    getsockname(socket_udp_register, (struct sockaddr *)&addr_server, &laddr_server);
    sprintf(client_to_register->random_number, "%d", rdn);
-   printf("%s \n", client_to_register->random_number);
    //sprintf(client_to_register->random_number, "%d", 3222);
    sprintf(new_port, "%d", ntohs(addr_server.sin_port));
    update_client_info(client_to_register);
@@ -359,19 +358,19 @@ void clients_comunication(udp_pdu *client_package, struct sockaddr_in* addr_clie
    if((client = find_client(client_package->id)) == NULL)
    {
       package(&package_to_send,ALIVE_REJ , configuration.id, "00000000", "Id incorrecta");
-      send_package(socket_udp, &package_to_send, (struct sockaddr *)addr_client, laddr_client);
+      send_package(socket_udp, &package_to_send, (struct sockaddr *)&client->ip, laddr_client);
       exit(0);
    }
    
-   else if(strcmp(client_package->random_number, "3222") !=0)
+   else if(strcmp(client_package->random_number, client->random_number) !=0)
    {
-      package(&package_to_send, ALIVE_REJ, configuration.id, "3222", "numero aleatorio incorrecto");
-      send_package(socket_udp, &package_to_send, (struct sockaddr *)addr_client, laddr_client);
+      package(&package_to_send, ALIVE_REJ, configuration.id, client->random_number, "numero aleatorio incorrecto");
+      send_package(socket_udp, &package_to_send, (struct sockaddr *)&client->ip, laddr_client);
       exit(0);
    }
 
-   package(&package_to_send, ALIVE, configuration.id, "3222", client->id);
-   send_package(socket_udp, &package_to_send, (struct sockaddr *)addr_client, laddr_client);
+   package(&package_to_send, ALIVE, configuration.id, client->random_number, client->id);
+   send_package(socket_udp, &package_to_send, (struct sockaddr *)&client->ip, laddr_client);
    exit(0);   
 
 }
@@ -413,6 +412,7 @@ void udp_control()
       }
       else if(pid == 0)
       {
+         signal(SIGUSR1, SIG_IGN);
          if(client_package.package_type == REG_REQ)
          {
             printf("Iniciando proceso de registro\n");
@@ -421,7 +421,6 @@ void udp_control()
          }
          else if(client_package.package_type == ALIVE)
          {
-            printf("ALIVE\n");
             clients_comunication(&client_package, &addr_client, &laddr_client);
          }
          exit(0);
@@ -475,6 +474,7 @@ int main(int argc, char *argv[])
    else if(udp_pid == 0)
    {
       signal(SIGINT, udp_signalhandler);
+      signal(SIGUSR1, udp_signalhandler);
       close(comunication_update_pie[0]);
       close(udp_protocol_pipe[1]);
       close(tcp_protocol_pipe[0]);
@@ -482,7 +482,7 @@ int main(int argc, char *argv[])
       udp_control();
    }
    close(comunication_update_pie[1]);
-   close(udp_protocol_pipe[1]);
+   close(udp_protocol_pipe[0]);
    tcp_pid = fork();
    if(udp_pid<0)
    {
