@@ -71,6 +71,7 @@ typedef struct
 int load_configuration(char* path, server_configuration* configuration);
 client* read_bbdd(int* num_clients);
 client* find_client(char* id);
+void update_client_info(client *client_to_update);
 void package(udp_pdu *package, unsigned char type, char *id, char *rdn, char *data);
 //UDP
 void udp_signalhandler(int signal);
@@ -89,15 +90,78 @@ client *clients;
 int num_clients;
 int socket_udp;
 int socket_tcp;
+int controler_pid;
+int udp_pid;
+int tcp_pid;
+int pid;
+int comunication_update_pie[2];
+int udp_protocol_pipe[2];
+int tcp_protocol_pipe[2];
 
+//*********************
+//    Signal Handlers
+//*********************
 
-void udp_signalhandler(int signal)
+void controler_signalhandler(int signal)
 {
+   client client_to_update;
+
+   int read_code;
    if(signal == SIGINT)
    {
       printf("\rProceso cerrado por ^c\n");
+      exit(0);
+   }
+   else if(signal == SIGUSR1)  
+   {
+      read_code = read(comunication_update_pie[0], &client_to_update, sizeof(client));
+      if(read_code < 0)
+      {
+         fprintf(stderr, "No se ha podido actualizar la informacion del cliente\n");
+         exit(0);
+      }
+
+      for(int i = 0; i < num_clients; i++)
+      {
+         if(strcmp(client_to_update.id, clients[i].id) == 0)
+         {
+            clients[i] = client_to_update;
+         }
+      }
+      write(udp_protocol_pipe[1], &client_to_update, sizeof(client));
+      write(tcp_protocol_pipe[1], &client_to_update, sizeof(client));
+      kill(SIGUSR1, udp_pid);
+      kill(SIGUSR1, tcp_pid);
+      
+   }
+}
+
+void udp_signalhandler(int signal)
+{
+   client client_to_update;
+   int read_code;
+   if(signal == SIGINT)
+   {
       close(socket_udp);
       exit(0);
+   }
+   else if(signal == SIGUSR1)
+   {
+      printf("update\n");
+      read_code = read(udp_protocol_pipe[0], &client_to_update, sizeof(client));
+      if(read_code < 0)
+      {
+         fprintf(stderr, "No se ha podido actualizar la informacion del cliente\n");
+         exit(0);
+      }
+
+      for(int i = 0; i < num_clients; i++)
+      {
+         if(strcmp(client_to_update.id, clients[i].id) == 0)
+         {
+            clients[i] = client_to_update;
+         }
+      }
    }
 }
 
@@ -166,6 +230,16 @@ client* find_client(char* id)
          return &clients[i];
    }
    return NULL;
+}
+
+void update_client_info(client *client_to_update)
+{
+   if(write(comunication_update_pie[1], client_to_update, sizeof(client)) < 0)
+   {
+      printf("No se ha podido realizar el update\n");
+      exit(0);
+   }
+   kill(controler_pid, SIGUSR1);
 }
 
 void package(udp_pdu *package, unsigned char type, char *id, char *rdn, char *data)
@@ -238,9 +312,11 @@ void register_process(udp_pdu *client_package, struct sockaddr_in* addr_client, 
    rdn = rand() % 99999999 + 1;
    open_udp_chanel(&socket_udp_register, 0);
    getsockname(socket_udp_register, (struct sockaddr *)&addr_server, &laddr_server);
-   //sprintf(client_to_register->random_number, "%d", rdn);
-   sprintf(client_to_register->random_number, "%d", 3222);
+   sprintf(client_to_register->random_number, "%d", rdn);
+   printf("%s \n", client_to_register->random_number);
+   //sprintf(client_to_register->random_number, "%d", 3222);
    sprintf(new_port, "%d", ntohs(addr_server.sin_port));
+   update_client_info(client_to_register);
    package(&package_to_send, REG_ACK, configuration.id, client_to_register->random_number, new_port);
    send_package(socket_udp, &package_to_send, (struct sockaddr *)addr_client, laddr_client);
    client_to_register->stat = WAIT_ACK_INFO;
@@ -320,7 +396,6 @@ void udp_control()
    int laddr_client;
    udp_pdu client_package;
    int size;
-   int pid;
    if(open_udp_chanel(&socket_udp, configuration.udp_port) == -1)
    {
       fprintf(stderr ,"Error no se ha podido abrir la conexion udp");
@@ -358,7 +433,7 @@ void udp_control()
 
 int main(int argc, char *argv[])
 {
-   signal(SIGINT, SIG_IGN); 
+   signal(SIGUSR1, controler_signalhandler);
    if(load_configuration(DEFAULT_CONFIGURATION, &configuration) < 0)
    {
       fprintf(stderr,"No se ha podido cargar la configuración.\n");
@@ -370,16 +445,61 @@ int main(int argc, char *argv[])
       exit(-1);
    }
 
+   
+   if(pipe(comunication_update_pie) < 0)
+   {
+      fprintf(stderr, "Error no se ha podido ejecutar el servidor. No se pudo crear el pipe");
+      exit(0);
+   }
+
+   if(pipe(udp_protocol_pipe) < 0)
+   {
+      fprintf(stderr, "Error no se ha podido ejecutar el servidor. No se pudo crear el pipe");
+      exit(-1);
+   }
+
+
+   if(pipe(tcp_protocol_pipe) < 0)
+   {
+      fprintf(stderr, "Error no se ha podido ejecutar el servidor. No se pudo crear el pipe");
+      exit(-1);
+   }
+   
+   controler_pid = getpid();
    //Proceso que atienda consexiones UDP
-   int udp = fork();
-   if(udp<0)
+   udp_pid = fork();
+   if(udp_pid<0)
    {
       fprintf(stderr, "Error no se ha podido crear proceso.");
    }
-   else if(udp == 0)
+   else if(udp_pid == 0)
    {
       signal(SIGINT, udp_signalhandler);
+      close(comunication_update_pie[0]);
+      close(udp_protocol_pipe[1]);
+      close(tcp_protocol_pipe[0]);
+      close(tcp_protocol_pipe[1]);
       udp_control();
    }
+   close(comunication_update_pie[1]);
+   close(udp_protocol_pipe[1]);
+   tcp_pid = fork();
+   if(udp_pid<0)
+   {
+      fprintf(stderr, "Error no se ha podido crear proceso.");
+   }
+   else if(tcp_pid == 0)
+   {
+      signal(SIGINT, udp_signalhandler);
+      signal(SIGUSR1, udp_signalhandler);
+      close(comunication_update_pie[0]);
+      close(tcp_protocol_pipe[1]);
+      close(udp_protocol_pipe[0]);
+      close(udp_protocol_pipe[1]);
+      exit(0);
+   }
+
+   close(tcp_protocol_pipe[1]);
+   wait(NULL);
    wait(NULL);
 }
